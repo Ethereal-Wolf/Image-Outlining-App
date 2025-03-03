@@ -1,0 +1,170 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { LoaderCircle } from 'lucide-react';
+
+export default function OutlineImageApp() {
+  const [image, setImage] = useState(null);
+  const [outlinedImage, setOutlinedImage] = useState(null);
+  const [progress, setProgress] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [detailLevel, setDetailLevel] = useState(50);
+  const [loading, setLoading] = useState(false);
+  const [apiUrl, setApiUrl] = useState('http://localhost:5001/api/outline');
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImage(file);
+      setOutlinedImage(null);
+      setProgress('Uploading image...');
+      setUploadProgress(0);
+
+      const fakeProgressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(fakeProgressInterval);
+            setProgress('Upload complete! Ready to process.');
+            return 100;
+          }
+          return prev + 10;
+        });
+      }, 200);
+    } else {
+      setImage(null);
+      setOutlinedImage(null);
+      setProgress('No image selected. Please upload an image.');
+      setUploadProgress(0);
+    }
+  };
+
+  const handleDetailChange = (e) => {
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value) && value >= 1 && value <= 300) {
+      setDetailLevel(value);
+    }
+  };
+
+  const handleApiUrlChange = (e) => {
+    setApiUrl(e.target.value);
+  };
+
+  const processImage = async (file, detailLevel) => {
+    if (!file) {
+      setProgress('No image uploaded. Please select an image to process.');
+      return;
+    }
+
+    setOutlinedImage(null);
+    setProgress('Restarting image processing...');
+
+    const formData = new FormData();
+    formData.append('image', file);
+    const adjustedDetailLevel = 300 - detailLevel;
+    formData.append('detailLevel', adjustedDetailLevel);
+
+    setLoading(true);
+    setProgress('Processing image...');
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        body: formData,
+        headers: new Headers(),
+        signal: new AbortController().signal
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.outlinedImageUrl) {
+          setOutlinedImage(`${data.outlinedImageUrl}?timestamp=${Date.now()}`);
+          setProgress(`Processing complete! Detail level: ${detailLevel}`);
+        } else {
+          setProgress('No outlines detected. Try adjusting the detail level or using a sharper image.');
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setProgress(`Failed to process image: ${errorData.error || response.statusText}`);
+      }
+    } catch (error) {
+      setProgress(`Error: ${error.message}. Check the server URL or make sure the backend is running.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadImage = () => {
+    if (outlinedImage) {
+      const link = document.createElement('a');
+      link.href = outlinedImage;
+      link.download = 'outlined_image.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 animate-fade-in">
+      <div className="max-w-5xl w-full p-12 bg-white shadow-2xl rounded-3xl transition-all duration-300 transform hover:scale-105">
+        <h1 className="text-6xl font-extrabold mb-8 text-center text-indigo-700 drop-shadow-lg">Image Outline Generator</h1>
+        <Input 
+          type="text" 
+          value={apiUrl} 
+          onChange={handleApiUrlChange} 
+          placeholder="Enter backend API URL" 
+          className="mb-6 p-4 border border-gray-300 rounded-lg w-full focus:ring-4 focus:ring-indigo-400"
+        />
+        <Input type="file" accept="image/*" onChange={handleImageUpload} className="mb-6 p-4 border border-gray-300 rounded-lg w-full" />
+        <div className="flex items-center gap-6 mb-8">
+          <label htmlFor="detailLevel" className="text-xl font-medium text-gray-700">Detail Level:</label>
+          <input
+            id="detailLevel"
+            type="range"
+            min="1"
+            max="300"
+            value={detailLevel}
+            onChange={handleDetailChange}
+            className="w-48 accent-indigo-500"
+          />
+          <Input
+            type="number"
+            min="1"
+            max="300"
+            value={detailLevel}
+            onChange={handleDetailChange}
+            className="p-3 border border-gray-300 rounded-lg w-24 text-center"
+          />
+          <span className="text-xl font-semibold text-indigo-600">{detailLevel}</span>
+        </div>
+        <Button onClick={() => processImage(image, detailLevel)} disabled={!image || loading} className="bg-indigo-500 hover:bg-indigo-600 text-white py-3 px-8 rounded-lg shadow-md hover:shadow-2xl">
+          {loading ? <LoaderCircle className="animate-spin mr-2" /> : null}
+          {loading ? 'Processing...' : 'Process Image'}
+        </Button>
+        {outlinedImage && (
+          <Button onClick={downloadImage} className="ml-4 bg-green-500 hover:bg-green-600 text-white py-3 px-8 rounded-lg shadow-md hover:shadow-2xl">
+            Download Outlined Image
+          </Button>
+        )}
+        {loading && <Progress className="mt-6" value={uploadProgress} />}
+        {progress && <p className="mt-6 text-lg font-medium text-indigo-700 animate-fade-in">{progress}</p>}
+        {uploadProgress > 0 && <p className="mt-4 text-lg font-medium">Upload Progress: {uploadProgress}%</p>}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
+          {image && (
+            <div className="transform transition-transform hover:scale-105">
+              <h2 className="text-2xl mb-4 font-semibold text-gray-800">Original Image</h2>
+              <img src={URL.createObjectURL(image)} alt="Original" className="rounded-lg shadow-lg" />
+            </div>
+          )}
+          {outlinedImage && (
+            <div className="transform transition-transform hover:scale-105">
+              <h2 className="text-2xl mb-4 font-semibold text-gray-800">Outlined Image</h2>
+              <img src={outlinedImage} alt="Outlined" className="rounded-lg shadow-lg border-4 border-indigo-500" />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
