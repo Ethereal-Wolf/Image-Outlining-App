@@ -49,7 +49,7 @@ mkdir uploads
 
 Run the Flask app:
 ```bash
-python app.py
+python backend.py
 ```
 By default, the backend will run on `http://localhost:5001`.
 
